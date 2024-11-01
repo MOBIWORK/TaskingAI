@@ -13,7 +13,20 @@ pipeline {
         stage('Checkout Code') {
             steps {
                 // Lấy mã nguồn từ repository
-                checkout scm
+                //checkout scm
+                script {
+            // Lấy mã nguồn từ repository
+                    def changes = checkout scm
+
+            // Kiểm tra có thay đổi nào trong thư mục WORK_DIR hay không
+                    def hasChanges = changes.findAll { it.path.startsWith("${WORK_DIR}/") }
+
+            // Nếu không có thay đổi, đánh dấu build là NOT_BUILT và dừng pipeline
+                    if (hasChanges.isEmpty()) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error("No changes detected in ${WORK_DIR}/ directory, skipping pipeline.")
+                    }
+                }
             }
         }
 
