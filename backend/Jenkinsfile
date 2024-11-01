@@ -59,8 +59,9 @@ pipeline {
                                 python -m venv venv &&
                                 source venv/bin/activate &&
                                 echo 'Installing dependencies...'
-                                pip install -r requirements.txt &&
-                                pip install -r test_requirements.txt &&
+                                python -m pip install --upgrade pip &&
+                                pip install --no-cache-dir -r requirements.txt &&
+                                pip install --no-cache-dir -r test_requirements.txt &&
                                 echo 'Downloading NLTK data...'
                                 mkdir -p nltk_data &&
                                 python -m nltk.downloader -d nltk_data punkt
