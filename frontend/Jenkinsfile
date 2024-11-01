@@ -8,11 +8,23 @@ pipeline {
         DOCKER_CREDENTIALS_ID = 'docker-hub'
     }
 
+    options {
+        // Chỉ kích hoạt pipeline khi có thay đổi trong thư mục frontend/
+        skipDefaultCheckout()
+    }
+
     stages {
         stage('Checkout Code') {
             steps {
                 // Lấy mã nguồn từ repository
-                checkout scm
+                script {
+                    // Kiểm tra có thay đổi nào trong thư mục frontend hay không
+                    def changes = checkout(scm).findAll { it.path.startsWith(WORK_DIR + '/') }
+                    if (changes.isEmpty()) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error("No changes detected in frontend/ directory, skipping pipeline.")
+                    }
+                }
             }
         }
 
