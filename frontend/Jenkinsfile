@@ -56,11 +56,10 @@ pipeline {
         stage('Push Docker Image to DockerHub') {
             steps {
                 script {
+                    withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                        sh 'echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin'
                         sh "docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
                         sh "docker push ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
-                        withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
-                                sh 'echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin'
-                                sh "docker push ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
                     }
                 }
                 sh "docker image rm ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
@@ -70,7 +69,7 @@ pipeline {
         stage('Deploy to Server') {
             steps {
                 sshagent(credentials: ['jenkins-ssh-key']) {
-                    sh "ssh -o StrictHostKeyChecking=no -i jenkins-ssh-key jenkins@125.212.231.31 'cd /home/jenkins/flask-docker && ./deploy.sh'"
+                    sh "ssh -o StrictHostKeyChecking=no -i jenkins-ssh-key jenkins@125.212.231.31 'cd /home/jenkins/TaskingAI/docker && ./deploy.sh'"
                 }
             }
         }
