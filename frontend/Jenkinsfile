@@ -32,7 +32,12 @@ pipeline {
             steps {
                 dir(WORK_DIR) {
                     // Chạy test cho frontend
-                    sh 'npm test'
+                    script {
+                        docker.image('node:18').inside {
+                            sh 'npm install'
+                            sh 'npm test'
+                        }
+                    }
                 }
             }
         }
