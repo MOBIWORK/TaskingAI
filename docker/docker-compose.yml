@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: aedudon/taskingai-console:v0.3.0
+    image: aedudon/TaskingAI-frontend:v0.3.0
     depends_on:
       - backend-web
       - backend-api

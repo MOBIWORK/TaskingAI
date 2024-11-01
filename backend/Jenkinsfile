@@ -31,16 +31,6 @@ pipeline {
             }
         }
 
-        stage('Build Docker Image') {
-            steps {
-                dir(WORK_DIR) {
-                    script {
-                        sh "docker build -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ."
-                    }
-                }
-            }
-        }
-
         stage('Run Tests') {
             steps {
                 dir(WORK_DIR) {
@@ -48,6 +38,16 @@ pipeline {
                     sh 'pip install -r requirements.txt'
                     sh 'pip install -r test_requirements.txt'
                     sh 'mkdir nltk_data && python -m nltk.downloader -d nltk_data punkt'
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir(WORK_DIR) {
+                    script {
+                        sh "docker build -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ."
+                    }
                 }
             }
         }
