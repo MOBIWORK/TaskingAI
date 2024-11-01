@@ -9,10 +9,6 @@ pipeline {
         JWT_SECRET_KEY = "dbefe42f34473990a3fa903a6a3283acdc3a910beb1ae271a6463ffa5a926bfb"
     }
 
-    options {
-        // Chỉ kích hoạt pipeline khi có thay đổi trong thư mục frontend/
-        skipDefaultCheckout()
-    }
 
     stages {
         stage('Checkout Code') {
@@ -33,14 +29,12 @@ pipeline {
             steps {
                 dir(WORK_DIR) {
                     script {
-                        def changes = checkout(scm)
-                        echo "Detected changes: ${changes.collect { it.path }}"
-                        def frontendChanges = changes.findAll { it.path.startsWith(WORK_DIR + '/') }
-                
-                        if (frontendChanges.isEmpty()) {
-                            currentBuild.result = 'NOT_BUILT'
-                            error("No changes detected in frontend/ directory, skipping pipeline.")
-                        } 
+                        def version = docker.image('python:3.9').inside {
+                            sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
+                        }
+                        //def version = sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
+                        IMAGE_TAG = version
+                        env.IMAGE_TAG = IMAGE_TAG
                     }
                 }
             }

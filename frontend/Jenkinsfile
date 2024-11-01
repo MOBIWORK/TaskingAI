@@ -8,10 +8,6 @@ pipeline {
         DOCKER_CREDENTIALS_ID = 'docker-hub'
     }
 
-    options {
-        // Chỉ kích hoạt pipeline khi có thay đổi trong thư mục frontend/
-        skipDefaultCheckout()
-    }
 
     stages {
         stage('Checkout Code') {
