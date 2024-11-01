@@ -37,7 +37,7 @@ pipeline {
             steps {
                 dir(WORK_DIR) {
                     script {
-                        def version = docker.image('python:3.9').inside {
+                        def version = docker.image('python:3.10').inside {
                             sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
                         }
                         //def version = sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
@@ -53,11 +53,15 @@ pipeline {
                 dir(WORK_DIR) {
                     script {
                         // Chạy các lệnh cài đặt và test trong container Python
-                        docker.image('python:3.9').inside {
+                        docker.image('python:3.10').inside {
                             // Cài đặt các dependencies cần thiết
                             sh """
-                                pip install --user -r requirements.txt &&
-                                pip install --user -r test_requirements.txt &&
+                                python -m venv venv &&
+                                source venv/bin/activate &&
+                                echo 'Installing dependencies...'
+                                pip install -r requirements.txt &&
+                                pip install -r test_requirements.txt &&
+                                echo 'Downloading NLTK data...'
                                 mkdir -p nltk_data &&
                                 python -m nltk.downloader -d nltk_data punkt
                             """
