@@ -4,18 +4,28 @@ pipeline {
     environment {
         WORK_DIR = "backend"
         IMAGE_TAG = ""
-        DOCKER_IMAGE_NAME = "taskingai-backend"
+        DOCKER_IMAGE_NAME = "aedudon/taskingai-backend"
         AES_ENCRYPTION_KEY = "b90e4648ad699c3bdf62c0860e09eb9efc098ee75f215bf750847ae19d41e4b0"
         JWT_SECRET_KEY = "dbefe42f34473990a3fa903a6a3283acdc3a910beb1ae271a6463ffa5a926bfb"
-        SERVER_IP = 'YOUR_SERVER_IP'
-        SSH_USER = 'YOUR_SSH_USER'
+    }
+
+    options {
+        // Chỉ kích hoạt pipeline khi có thay đổi trong thư mục frontend/
+        skipDefaultCheckout()
     }
 
     stages {
         stage('Checkout Code') {
             steps {
                 // Lấy mã nguồn từ repository
-                checkout scm
+                script {
+                    // Kiểm tra có thay đổi nào trong thư mục frontend hay không
+                    def changes = checkout(scm).findAll { it.path.startsWith(WORK_DIR + '/') }
+                    if (changes.isEmpty()) {
+                        currentBuild.result = 'NOT_BUILT'
+                        error("No changes detected in backend/ directory, skipping pipeline.")
+                    }
+                }
             }
         }
 
@@ -23,7 +33,10 @@ pipeline {
             steps {
                 dir(WORK_DIR) {
                     script {
-                        def version = sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
+                        def version = docker.image('python:3.9').inside {
+                            sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
+                        }
+                        //def version = sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
                         IMAGE_TAG = version
                         env.IMAGE_TAG = IMAGE_TAG
                     }
