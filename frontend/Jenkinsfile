@@ -1,0 +1,79 @@
+pipeline {
+    agent any
+
+    environment {
+        WORK_DIR = "frontend"
+        IMAGE_TAG = ""
+        DOCKER_IMAGE_NAME = "taskingai-frontend"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                // Lấy mã nguồn từ repository
+                checkout scm
+            }
+        }
+
+        stage('Read Version') {
+            steps {
+                dir(WORK_DIR) {
+                    script {
+                        def packageJson = readJSON file: 'package.json'
+                        IMAGE_TAG = packageJson.version
+                        env.IMAGE_TAG = IMAGE_TAG // Đặt IMAGE_TAG cho các bước sau
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir(WORK_DIR) {
+                    script {
+                        // Build Docker image với tag phiên bản từ package.json
+                        sh "docker build -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ."
+                    }
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                dir(WORK_DIR) {
+                    // Chạy test cho frontend
+                    sh 'npm test'
+                }
+            }
+        }
+
+        stage('Deploy to Server') {
+            steps {
+                script {
+                    // Định nghĩa server IP và user
+                    def serverIP = 'YOUR_SERVER_IP'
+                    def sshUser = 'YOUR_SSH_USER'
+
+                    // Upload Docker image và chạy trên server
+                    sh """
+                    docker save ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} | bzip2 | ssh ${sshUser}@${serverIP} 'bunzip2 | docker load'
+                    ssh ${sshUser}@${serverIP} 'docker stop ${DOCKER_IMAGE_NAME} || true && docker rm ${DOCKER_IMAGE_NAME} || true'
+                    ssh ${sshUser}@${serverIP} 'docker run -d --name ${DOCKER_IMAGE_NAME} -p 80:80 ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}'
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs() // Dọn dẹp workspace sau khi pipeline kết thúc
+        }
+        success {
+            echo 'Frontend deployment successful!'
+        }
+        failure {
+            echo 'Frontend deployment failed!'
+        }
+    }
+}

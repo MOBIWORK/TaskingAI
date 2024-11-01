@@ -1,0 +1,112 @@
+pipeline {
+    agent any
+    environment {
+        WORK_DIR = 'plugin'
+        DOCKERHUB_REPO = 'your_dockerhub_username/plugin'
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub_credentials')
+        IMAGE_TAG = ''
+    }
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+        
+        stage('Set Image Tag') {
+            steps {
+                script {
+                    // Tạo tag ngắn từ commit SHA
+                    IMAGE_TAG = sh(script: "echo ${env.GIT_COMMIT} | cut -c1-7", returnStdout: true).trim()
+                }
+            }
+        }
+
+        stage('Setup Python & Install Dependencies') {
+            steps {
+                dir(WORK_DIR) {
+                    script {
+                        // Cài đặt Python và các phụ thuộc
+                        sh 'python3 -m venv venv'
+                        sh '. venv/bin/activate && pip install -r requirements.txt'
+                    }
+                }
+            }
+        }
+        
+        stage('Run Code Quality Check') {
+            steps {
+                script {
+                    // Kiểm tra chính tả bằng typos
+                    sh 'typos'
+                }
+            }
+        }
+        
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    // Build Docker image
+                    dir(WORK_DIR) {
+                        sh "docker build -t ${DOCKERHUB_REPO}:${IMAGE_TAG} ."
+                    }
+                }
+            }
+        }
+        
+        stage('Run Docker Image Locally & Tests') {
+            steps {
+                script {
+                    // Chạy container Docker cục bộ để kiểm thử
+                    sh '''
+                        echo "$PLUGIN_BUNDLE_CREDENTIALS" > .env
+                        echo "$TEST_S3_SECRET_R2" >> .env
+                        docker run -d --name test_container --network=host \
+                            --env-file .env \
+                            -e PATH_TO_VOLUME=./test \
+                            -e HOST_URL=http://localhost:8030 \
+                            -e OBJECT_STORAGE_TYPE=local \
+                            -e AES_ENCRYPTION_KEY=$AES_ENCRYPTION_KEY \
+                            ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                        sleep 10
+                    '''
+                    
+                    // Thực thi kiểm thử
+                    sh 'bash ./plugin/test/run_full_test.sh'
+                    
+                    // Dừng container sau kiểm thử
+                    sh 'docker stop test_container && docker rm test_container'
+                }
+            }
+        }
+        
+        stage('Push Docker Image to DockerHub') {
+            steps {
+                script {
+                    // Đăng nhập vào DockerHub và đẩy image lên
+                    docker.withRegistry('https://index.docker.io/v1/', 'dockerhub_credentials') {
+                        sh "docker push ${DOCKERHUB_REPO}:${IMAGE_TAG}"
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to VPS') {
+            steps {
+                script {
+                    // Kết nối đến VPS và triển khai container từ DockerHub
+                    sshagent(['vps_ssh_credentials']) {
+                        sh '''
+                            ssh user@vps_ip_address << EOF
+                            docker pull ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                            docker stop plugin_container || true
+                            docker rm plugin_container || true
+                            docker run -d --name plugin_container -p 80:80 ${DOCKERHUB_REPO}:${IMAGE_TAG}
+                            EOF
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}

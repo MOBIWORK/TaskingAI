@@ -1,0 +1,83 @@
+pipeline {
+    agent any
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials') // Thay bằng ID của DockerHub credentials trong Jenkins
+        DOCKERHUB_REPO = 'taskingai/taskingai-inference' // DockerHub repository cho inference
+        IMAGE_TAG = "" // Tự động gán giá trị cho IMAGE_TAG dựa trên commit hash hoặc tag
+        WORK_DIR = 'inference' // Thư mục của phần `backend-inference`
+    }
+    stages {
+        stage('Checkout Code') {
+            steps {
+                // Lấy mã nguồn từ Git
+                checkout scm
+            }
+        }
+
+        stage('Set Image Tag') {
+            steps {
+                script {
+                    def gitCommit = sh(returnStdout: true, script: "git rev-parse --short HEAD").trim()
+                    def gitTag = sh(returnStdout: true, script: "git describe --tags --exact-match || true").trim()
+                    IMAGE_TAG = gitTag ? gitTag : gitCommit
+                    env.IMAGE_TAG = IMAGE_TAG
+                }
+            }
+        }
+
+        stage('Set up Python') {
+            steps {
+                // Cài đặt môi trường Python
+                sh 'python3 -m venv venv'
+                sh '. venv/bin/activate && pip install -r requirements.txt'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                script {
+                    docker.build("${DOCKERHUB_REPO}:${IMAGE_TAG}", "${WORK_DIR}")
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                script {
+                    // Chạy container tạm thời để kiểm thử
+                    docker.image("${DOCKERHUB_REPO}:${IMAGE_TAG}").withRun("-d --name test_container --network=host -e MODE=test -e PROVIDER_URL_BLACK_LIST=tasking.ai") { c ->
+                        sleep 5 // Chờ dịch vụ khởi động
+                        sh 'bash ./test/run_full_test.sh'
+                    }
+                }
+            }
+        }
+
+        stage('Push to DockerHub') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'DOCKERHUB_CREDENTIALS') {
+                        docker.image("${DOCKERHUB_REPO}:${IMAGE_TAG}").push()
+                    }
+                }
+            }
+        }
+
+        stage('Deploy to VPS') {
+            steps {
+                // Kết nối SSH tới VPS để triển khai
+                sshagent(credentials: ['vps-ssh-credentials']) { // Thay bằng ID SSH credentials cho VPS của bạn
+                    sh """
+                    ssh -o StrictHostKeyChecking=no user@your_vps_ip 'cd /path/to/your/project && docker-compose pull && docker-compose up -d'
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

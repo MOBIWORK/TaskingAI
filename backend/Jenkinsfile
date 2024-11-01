@@ -1,0 +1,152 @@
+pipeline {
+    agent any
+
+    environment {
+        WORK_DIR = "backend"
+        IMAGE_TAG = ""
+        DOCKER_IMAGE_NAME = "taskingai-backend"
+        AES_ENCRYPTION_KEY = "b90e4648ad699c3bdf62c0860e09eb9efc098ee75f215bf750847ae19d41e4b0"
+        JWT_SECRET_KEY = "dbefe42f34473990a3fa903a6a3283acdc3a910beb1ae271a6463ffa5a926bfb"
+        SERVER_IP = 'YOUR_SERVER_IP'
+        SSH_USER = 'YOUR_SSH_USER'
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                // Lấy mã nguồn từ repository
+                checkout scm
+            }
+        }
+
+        stage('Read Version') {
+            steps {
+                dir(WORK_DIR) {
+                    script {
+                        def version = sh(script: "python -c 'from app import __VERSION__; print(__VERSION__)'", returnStdout: true).trim()
+                        IMAGE_TAG = version
+                        env.IMAGE_TAG = IMAGE_TAG
+                    }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                dir(WORK_DIR) {
+                    script {
+                        sh "docker build -t ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ."
+                    }
+                }
+            }
+        }
+
+        stage('Run Tests') {
+            steps {
+                dir(WORK_DIR) {
+                    // Cài đặt và chạy test cho backend
+                    sh 'pip install -r requirements.txt'
+                    sh 'pip install -r test_requirements.txt'
+                    sh 'mkdir nltk_data && python -m nltk.downloader -d nltk_data punkt'
+                }
+            }
+        }
+
+        stage('Create Docker Network') {
+            steps {
+                sh "docker network create taskingai-network || true"
+            }
+        }
+
+        stage('Run Dependencies - Postgres, Redis, Inference, Plugin') {
+            steps {
+                // Chạy các container cần thiết
+                sh """
+                    docker run --network taskingai-network -d --rm \
+                        -e POSTGRES_DB=taskingai \
+                        -e POSTGRES_USER=postgres \
+                        -e POSTGRES_PASSWORD=TaskingAI321 \
+                        --name db ankane/pgvector:v0.5.1
+
+                    docker run --network taskingai-network -d --rm --name cache redis:7-alpine
+
+                    docker run --network taskingai-network -d --rm \
+                        -e MODE=TEST --name inference taskingai/taskingai-inference:v0.2.14
+
+                    docker run --network taskingai-network -d --rm \
+                        --env-file=./1.env \
+                        -e MODE=TEST \
+                        -e PATH_TO_VOLUME="./test" \
+                        -e OBJECT_STORAGE_TYPE="s3" \
+                        --name plugin \
+                        taskingai/taskingai-plugin:v0.2.10
+                """
+            }
+        }
+
+        stage('Run Backend - WEB') {
+            steps {
+                sh """
+                    docker run --network taskingai-network --rm -d -p 8080:8000 \
+                        -e PURPOSE=WEB \
+                        -e POSTGRES_URL="postgres://postgres:TaskingAI321@db:5432/taskingai" \
+                        -e REDIS_URL="redis://cache:6379/0" \
+                        -e OBJECT_STORAGE_TYPE="local" \
+                        -e HOST_URL=http://127.0.0.1:8080 \
+                        -e PATH_TO_VOLUME="./storage" \
+                        -e PROJECT_ID="taskingai" \
+                        -e TASKINGAI_INFERENCE_URL=http://inference:8000 \
+                        -e TASKINGAI_PLUGIN_URL=http://plugin:8000 \
+                        -e AES_ENCRYPTION_KEY=$AES_ENCRYPTION_KEY \
+                        -e JWT_SECRET_KEY=$JWT_SECRET_KEY \
+                        ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}
+                """
+            }
+        }
+
+        stage('Run Tests for WEB and API') {
+            steps {
+                script {
+                    sleep(time: 10, unit: 'SECONDS') // Đợi dịch vụ khởi động
+                }
+                // Chạy các script test
+                sh 'bash ./run_web_test.sh'
+                sh 'bash ./run_api_test.sh'
+            }
+        }
+
+        stage('Stop Containers') {
+            steps {
+                sh """
+                    docker stop r2_docker || true
+                    sleep 5
+                """
+            }
+        }
+
+        stage('Deploy to Server') {
+            steps {
+                script {
+                    // Upload Docker image và chạy trên server
+                    sh """
+                        docker save ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} | bzip2 | ssh ${SSH_USER}@${SERVER_IP} 'bunzip2 | docker load'
+                        ssh ${SSH_USER}@${SERVER_IP} 'docker stop ${DOCKER_IMAGE_NAME} || true && docker rm ${DOCKER_IMAGE_NAME} || true'
+                        ssh ${SSH_USER}@${SERVER_IP} 'docker run -d --name ${DOCKER_IMAGE_NAME} -p 80:8000 ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}'
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs() // Dọn dẹp workspace sau khi pipeline kết thúc
+        }
+        success {
+            echo 'Backend deployment successful!'
+        }
+        failure {
+            echo 'Backend deployment failed!'
+        }
+    }
+}
