@@ -18,7 +18,8 @@ pipeline {
                     checkout scm
                     
                     // Kiểm tra có thay đổi nào trong thư mục WORK_DIR hay không
-                    def changes = sh(script: "git status --porcelain", returnStdout: true).trim().tokenize('\n')
+                    //def changes = sh(script: "git status --porcelain", returnStdout: true).trim().tokenize('\n')
+                    def changes = sh(script: "git diff --name-only HEAD HEAD~1", returnStdout: true).trim().tokenize('\n')
 
                     // Kiểm tra nếu có thay đổi trong thư mục WORK_DIR
                     def hasChanges = changes.any { it.startsWith("${WORK_DIR}/") }
