@@ -56,12 +56,11 @@ pipeline {
                         docker.image('python:3.10').inside {
                             // Cài đặt các dependencies cần thiết
                             sh """
-                                python -m venv venv &&
-                                source venv/bin/activate &&
                                 echo 'Installing dependencies...'
-                                python -m pip install --upgrade pip &&
-                                pip install --no-cache-dir -r requirements.txt &&
-                                pip install --no-cache-dir -r test_requirements.txt &&
+                                pip install --no-cache-dir --target=/tmp/pip_packages -r requirements.txt &&
+                                pip install --no-cache-dir --target=/tmp/pip_packages -r test_requirements.txt &&
+                                echo 'Setting PYTHONPATH...'
+                                export PYTHONPATH=/tmp/pip_packages:$PYTHONPATH &&
                                 echo 'Downloading NLTK data...'
                                 mkdir -p nltk_data &&
                                 python -m nltk.downloader -d nltk_data punkt
