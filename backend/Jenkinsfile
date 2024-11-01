@@ -13,13 +13,20 @@ pipeline {
     stages {
         stage('Checkout Code') {
             steps {
-                // Lấy mã nguồn từ repository
                 script {
-                    // Kiểm tra có thay đổi nào trong thư mục frontend hay không
-                    def changes = checkout(scm).findAll { it.path.startsWith(WORK_DIR + '/') }
-                    if (changes.isEmpty()) {
+                // Lấy mã nguồn từ repository
+                    checkout scm
+                    
+                    // Kiểm tra có thay đổi nào trong thư mục WORK_DIR hay không
+                    def changes = sh(script: "git diff --name-only HEAD HEAD~1", returnStdout: true).trim().tokenize('\n')
+
+                    // Kiểm tra nếu có thay đổi trong thư mục WORK_DIR
+                    def hasChanges = changes.any { it.startsWith("${WORK_DIR}/") }
+
+                    // Nếu không có thay đổi, đánh dấu build là NOT_BUILT và dừng pipeline
+                    if (!hasChanges) {
                         currentBuild.result = 'NOT_BUILT'
-                        error("No changes detected in backend/ directory, skipping pipeline.")
+                        error("No changes detected in ${WORK_DIR}/ directory, skipping pipeline.")
                     }
                 }
             }
