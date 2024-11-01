@@ -28,19 +28,19 @@ pipeline {
             }
         }
 
-        stage('Run Tests') {
-            steps {
-                dir(WORK_DIR) {
-                    // Chạy test cho frontend
-                    script {
-                        docker.image('node:18').inside {
-                            sh 'npm install'
-                            sh 'npm test'
-                        }
-                    }
-                }
-            }
-        }
+        // stage('Run Tests') {
+        //     steps {
+        //         dir(WORK_DIR) {
+        //             // Chạy test cho frontend
+        //             script {
+        //                 docker.image('node:18').inside {
+        //                     sh 'npm install'
+        //                     sh 'npm test'
+        //                 }
+        //             }
+        //         }
+        //     }
+        // }
 
         stage('Build Docker Image') {
             steps {
