@@ -56,10 +56,11 @@ pipeline {
         stage('Push Docker Image to DockerHub') {
             steps {
                 script {
-                    docker.withRegistry('', DOCKER_CREDENTIALS_ID) {
-                        sh 'echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin'
                         sh "docker tag ${DOCKER_IMAGE_NAME}:${IMAGE_TAG} ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
                         sh "docker push ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
+                        withCredentials([usernamePassword(credentialsId: 'docker-hub', usernameVariable: 'DOCKER_USERNAME', passwordVariable: 'DOCKER_PASSWORD')]) {
+                                sh 'echo $DOCKER_PASSWORD | docker login --username $DOCKER_USERNAME --password-stdin'
+                                sh "docker push ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
                     }
                 }
                 sh "docker image rm ${DOCKER_IMAGE_NAME}:${IMAGE_TAG}"
